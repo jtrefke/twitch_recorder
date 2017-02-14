@@ -39,10 +39,11 @@ The entire project can be run from a standalone vagrant server. The purpose of t
 
 # Handling the problem with O-Auth
 if you get an error that pervents you from accessing streams. Try this (it worked for me)... 
-Step 1. (in terminal/cli) Type `livestreamer --twitch-oauth-authenticate`.
-Step 2 copy the response url into Chrome will open and ask you to login to twitch. It will give you a "page does not exist" error. FeelsBadMan
-Step 3. Check the url. It has a section that says `access_token=xxxxxxxxxxxxxxxxxxxxxxxx`. Copy this string.
-Step 4: use this as your oauthToken in record.py
+
+ * Step 1. (in terminal/cli) Type `livestreamer --twitch-oauth-authenticate`.
+ * Step 2 copy the response url into Chrome will open and ask you to login to twitch. It will give you a "page does not exist" error. FeelsBadMan
+ * Step 3. Check the url. It has a section that says `access_token=xxxxxxxxxxxxxxxxxxxxxxxx`. Copy this string.
+ * Step 4: use this as your oauthToken in record.py
 
 Source: https://www.reddit.com/r/Twitch/comments/52sye3/livestreamer_help_please_help/d7n0j36/?st=iyz5xqc2&sh=0f192548
 
