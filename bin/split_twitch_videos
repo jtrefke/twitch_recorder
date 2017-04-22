@@ -1,0 +1,124 @@
+#!/bin/bash
+
+function terminate() {
+  local exit_status="$1"
+  local message="$2"
+
+  local output_stream=$([ "${exit_status}" == "0" ] && 1 || 2)
+  echo "${message}">&${output_stream}
+  exit ${exit_status}
+}
+
+function seconds_to_duration() {
+  local hours=$(($1 / 3600))
+  local minutes=$(($1  % 3600 / 60))
+  local seconds=$(($1 % 60))
+
+  printf "%02d:%02d:%02d\n" ${hours} ${minutes} ${seconds}
+}
+
+function split_video() {
+  local master_file_path=$1
+  local output_file_path=$2
+  local start_duration=$3
+  local length_duration=$4
+
+  if [ -s "${output_file_path}" ]; then
+    return 1
+  fi
+
+  ffmpeg -i "${master_file_path}" -vcodec copy \
+    -ss ${start_duration} -t ${length_duration} \
+    "${output_file_path}"
+
+  return $?
+}
+
+function get_video_length() {
+  local video_file_path=$1
+
+  local length=$(ffprobe -i "${video_file_path}" -show_entries format=duration -v quiet -of csv="p=0" 2>/dev/null)
+  local exit_status=$?
+
+  # remove decimal from microtime
+  echo ${length%%.*}
+  return ${exit_status}
+}
+
+function print_summary_message() {
+  local files_processed_count="$1"
+  local chunks_created="$2"
+  local chunks_skipped="$3"
+  local output_dir="$4"
+
+cat<<END_OF_MESSAGE
+
+All operations completed!
+
+Processed ${files_processed_count} videos
+Created ${chunks_created} new video file(s)
+Skipped {chunks_skipped} existing video file(s)
+
+You can find the files in ${output_dir}
+
+END_OF_MESSAGE
+}
+
+set -u
+TWITCH_RECORDER_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+TWITCH_RECORDER_WORKSPACE="${HOME}/twitch_recorder"
+# Sourcing variables:
+# VIDEO_DOWNLOAD_DIRECTORY, SPLIT_OUTPUTS_DIR,
+# SPLIT_CHUNK_LENGTH, SPLIT_PROCESSES_LIMIT
+source "${TWITCH_RECORDER_HOME}/twitch_recorder.conf"
+[ -f "${HOME}/.twitch_recorder/twitch_recorder.conf" ] && source "${HOME}/.twitch_recorder/twitch_recorder.conf"
+
+if [ "${1:-${VIDEO_DOWNLOAD_DIRECTORY}}" != "${VIDEO_DOWNLOAD_DIRECTORY}" ]; then
+  VIDEO_DOWNLOAD_DIRECTORY="$1"
+fi
+
+if [ ! -d "${VIDEO_DOWNLOAD_DIRECTORY}" ]; then
+  echo "Video download directory '${VIDEO_DOWNLOAD_DIRECTORY}' is not a directory."
+  exit 1
+fi
+
+
+declare -A STATS
+STATS[files_processed]=0
+STATS[chunks_started]=0
+STATS[chunks_created]=0
+for video_path in ${VIDEO_DOWNLOAD_DIRECTORY}/*.mp4; do
+  [ ! -f "${video_path}" ] && continue
+
+  video_name="$(basename "$video_path")"
+  split_output_dir="${SPLIT_OUTPUTS_DIR}/${video_name}-chop"
+  seconds_left=$(get_video_length "${video_path}") || \
+    terminate $? "Failed determining length of video '${video_name}'"
+
+  last_start_seconds=0
+  chunk_number=1
+  mkdir -p "${split_output_dir}"
+  while [ ${seconds_left} -gt 0 ]; do
+    current_chunk_file_path="${split_output_dir}/${chunk_number}-${video_name}"
+    split_video "${video_path}" "${current_chunk_file_path}" \
+      $(seconds_to_duration ${last_start_seconds}) \
+      $(seconds_to_duration ${SPLIT_CHUNK_LENGTH}) && \
+        STATS[chunks_created]=$((${STATS[chunks_created]}+1)) || \
+        echo "Chunk '$(basename "${current_chunk_file_path}")' already exists; will not create it again." &
+
+    STATS[chunks_started]=$((${STATS[chunks_started]}+1))
+    [ "$((${STATS[chunks_started]} % ${SPLIT_PROCESSES_LIMIT}))" == "0" ] && wait
+
+    last_start_seconds=$((${last_start_seconds}+${SPLIT_CHUNK_LENGTH}))
+    seconds_left=$((${seconds_left}-${SPLIT_CHUNK_LENGTH}))
+    chunk_number=$((${chunk_number}+1))
+  done
+  STATS[files_processed]=$((${STATS[files_processed]}+1))
+done
+
+wait
+
+print_summary_message "${STATS[files_processed]}" \
+  "${STATS[chunks_created]}" \
+  "$((${STATS[chunks_started]}-${STATS[chunks_created]}))" \
+  "${SPLIT_OUTPUTS_DIR}"

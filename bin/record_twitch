@@ -1,0 +1,59 @@
+#!/bin/bash
+
+function archive_logs() {
+  if [ -f "${LOG[REGULAR_PATH]}" ]; then
+    mkdir -p "${LOG[ARCHIVE_DIR]}"
+    date_prefix=$(date +%Y%m%d_%H%M%S)
+
+    [ -f "${LOG[REGULAR_PATH]}" ] && mv "${LOG[REGULAR_PATH]}" \
+    "${LOG[ARCHIVE_DIR]}/${date_prefix}_$(basename "${LOG[REGULAR_PATH]%.*}").log"
+
+    [ -f "${LOG[ERROR_PATH]}" ] && mv "${LOG[ERROR_PATH]}" \
+    "${LOG[ARCHIVE_DIR]}/${date_prefix}_$(basename "${LOG[ERROR_PATH]%.*}").log"
+  fi
+}
+
+function create_download_directory() {
+  mkdir -p "${VIDEO_DOWNLOAD_DIRECTORY}"
+}
+
+function record_user_stream() {
+  local twitch_username="$1"
+  python3 "${LIB_DIR}/record.py" "${USER_OFFLINE_RETRY_TIME}" \
+    "${twitch_username}" \
+    "${VIDEO_QUALITY}" \
+    "${VIDEO_DOWNLOAD_DIRECTORY}" \
+    "${CLIENT_ID}" \
+    "${OAUTH_TOKEN}"
+}
+
+set -u
+TWITCH_RECORDER_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+TWITCH_RECORDER_WORKSPACE="${HOME}/twitch_recorder"
+source "${TWITCH_RECORDER_HOME}/twitch_recorder.conf"
+[ -f "${HOME}/.twitch_recorder/twitch_recorder.conf" ] && source "${HOME}/.twitch_recorder/twitch_recorder.conf"
+
+TWITCH_USERNAMES_PATH="${TWITCH_RECORDER_WORKSPACE}/twitch_usernames.txt"
+LIB_DIR="${TWITCH_RECORDER_HOME}/lib"
+
+declare -A LOG
+LOG[REGULAR_PATH]="${TWITCH_RECORDER_WORKSPACE}/$(basename "$0").log"
+LOG[ERROR_PATH]="$(dirname "${LOG[REGULAR_PATH]}")/$(basename "${LOG[REGULAR_PATH]%.*}")_errors.log"
+LOG[ARCHIVE_DIR]="$(dirname "${LOG[REGULAR_PATH]}")/logs"
+
+mkdir -p "${TWITCH_RECORDER_WORKSPACE}"
+touch "${TWITCH_USERNAMES_PATH}"
+
+if [ ! -s "${TWITCH_USERNAMES_PATH}" ]; then
+  echo "Please add twitch usernames, one per line, to '${TWITCH_USERNAMES_PATH}'"
+  exit 1
+fi
+
+archive_logs
+create_download_directory
+
+for twitch_user in $(cat "${TWITCH_USERNAMES_PATH}"); do
+  record_user_stream "${twitch_user}" >> >(tee -a "${LOG[REGULAR_PATH]}") 2>> >(tee -a "${LOG[ERROR_PATH]}") &
+done
+wait
+echo "Twitch recorder exited with status $?"

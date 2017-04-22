@@ -75,7 +75,7 @@ def loopcheck():
             print("Stream is done. Going back to checking..")
             time.sleep(15)
 
-def main(username):
+def main(argRefresh, argUsername, argQuality, argDirectory, argClientId, argOauthToken):
     global refresh
     global user
     global quality
@@ -84,20 +84,19 @@ def main(username):
     global clientId
     global oauthToken
 
-    print("Usage: check.py [refresh] [user] [quality]")
-    print("Usage: TwitchChecker.py [refresh] [user] [quality]")
-
-    refresh = 300.0 # 300 = 5 minutes
-    user = username
-    quality = "medium" # best, high, medium, low, mobile
-    directory = "/vagrant/raw/"
+    refresh = float(argRefresh) # time in s
+    user = argUsername
+    quality = argQuality # best, high, medium, low, mobile
+    directory = argDirectory
     duration = 240 # length of movie. seconds to minutes. 3600 = 60 minutes, 3000 = 50,  2700 = 45
-    clientId = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # unique to this app ( https://blog.twitch.tv/client-id-required-for-kraken-api-calls-afbb8e95f843 )
-    oauthToken = "xxxxxxxxxxxxxxxxxxxxxxxxxxx" # twitch token needs to be retrieved from http://www.twitchapps.com/tmi/ . Copy only the key and not the oauth part, and replace the xxxxxxxxx portion above.
+    clientId = argClientId # unique to this app ( https://blog.twitch.tv/client-id-required-for-kraken-api-calls-afbb8e95f843 )
+    oauthToken = argOauthToken # twitch token needs to be retrieved from http://www.twitchapps.com/tmi/ . Copy only the key and not the oauth part, and replace the xxxxxxxxx portion above.
 
+    print("refresh=",refresh,", user=",user,", quality=",quality,", directory=",directory,", duration=",duration,", clientId=",clientId,", oauthToken=",oauthToken)
+    sys.exit(13)
 
     if(refresh<15):
-        print("Check interval should not be lower than 15 seconds")
+        print("Check refresh interval should not be lower than 15 seconds")
         refresh=15
 
     print("Checking for",user,"every",refresh,"seconds. Record with",quality,"quality.")
@@ -106,4 +105,9 @@ def main(username):
 
 if __name__ == "__main__":
     # execute only if run as a script
-    main(''.join(sys.argv[1:]))
+    if len(sys.argv[1:]) != 6:
+        print("Invalid arguments: ", ' '.join(sys.argv[1:]),"\n")
+        print("Usage: record.py [refresh] [username] [quality] [directory] [clientid] [oauthtoken]")
+        sys.exit(1)
+    else:
+        main(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
